@@ -52,6 +52,7 @@ enum class BgMode(val label: String) {
 }
 
 enum class TapType(val label: String) {
+    CLOCK("Clock app"),
     ALARMS("Alarms"),
     TIMERS("Timers"),
     CALENDAR("Calendar"),
@@ -110,7 +111,7 @@ data class ClockSettings(
     val animation: DigitAnim = DigitAnim.NONE,
     val animUnit: AnimUnit = AnimUnit.MINUTE,
     // taps
-    val tapType: TapType = TapType.ALARMS,
+    val tapType: TapType = TapType.CLOCK,
     val tapValue: String = "",
     /** What tapping the date does; NONE means "same as the widget tap". */
     val dateTapType: TapType = TapType.CALENDAR,

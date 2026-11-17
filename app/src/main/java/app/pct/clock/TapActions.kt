@@ -46,6 +46,13 @@ object TapActions {
         return settingsIntent(ctx, widgetId)
     }
 
+    /** Opens the phone's Clock app on its main screen. */
+    private fun clockAppIntent(ctx: Context, widgetId: Int): Intent {
+        val pm = ctx.packageManager
+        for (pkg in CLOCK_PACKAGES) pm.getLaunchIntentForPackage(pkg)?.let { return it }
+        return clockIntent(ctx, widgetId, AlarmClock.ACTION_SHOW_ALARMS)
+    }
+
     private fun calendarIntent(ctx: Context, widgetId: Int): Intent {
         val pm = ctx.packageManager
         val main = Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_CALENDAR)
@@ -58,6 +65,7 @@ object TapActions {
     }
 
     private fun intentFor(ctx: Context, widgetId: Int, type: TapType, value: String): Intent? = when (type) {
+        TapType.CLOCK -> clockAppIntent(ctx, widgetId)
         TapType.ALARMS -> clockIntent(ctx, widgetId, AlarmClock.ACTION_SHOW_ALARMS)
         TapType.TIMERS -> clockIntent(ctx, widgetId, AlarmClock.ACTION_SHOW_TIMERS)
         TapType.CALENDAR -> calendarIntent(ctx, widgetId)
