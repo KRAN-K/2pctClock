@@ -85,9 +85,13 @@ object WidgetRenderer {
         }
         rv.setViewVisibility(R.id.gear, if (s.showGear) View.VISIBLE else View.GONE)
         rv.setOnClickPendingIntent(R.id.gear, TapActions.gearPending(ctx, id))
-        val day = Palette.resolve(ctx, s, false)
-        val nt = Palette.resolve(ctx, s, true)
-        color(R.id.gear, "setColorFilter", day.sub, nt.sub)
+        // keep the gear clear of rounded corners (API 31+ can set the margin exactly)
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            val r = CORNER_DP[s.cornerStyle.coerceIn(0, CORNER_DP.lastIndex)]
+            val m = maxOf(10f, r * 0.32f)
+            rv.setViewLayoutMargin(R.id.gear, RemoteViews.MARGIN_TOP, m, TypedValue.COMPLEX_UNIT_DIP)
+            rv.setViewLayoutMargin(R.id.gear, RemoteViews.MARGIN_END, m, TypedValue.COMPLEX_UNIT_DIP)
+        }
     }
 
     fun buildStyled(ctx: Context, id: Int, s: ClockSettings, wDp: Float, hDp: Float): RemoteViews {
