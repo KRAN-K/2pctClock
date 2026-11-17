@@ -24,6 +24,8 @@ enum class ThemeMode(val label: String) {
 
 enum class ClockAlign(val label: String) { START("Left"), CENTER("Center"), END("Right") }
 
+enum class LayoutStyle(val label: String) { STACKED("Stacked"), SPLIT("Split: time | date") }
+
 enum class DigitAnim(val label: String, val durationMs: Int) {
     NONE("None", 0), ROLL("Roll", 450), FADE("Fade", 450), POP("Pop", 500),
     FLICKER("Flicker", 600), FIRE("Fire", 900), BURN("Burn", 1300), WATER("Water", 900),
@@ -93,6 +95,7 @@ data class ClockSettings(
     val fontGradientKey: String = "sunset",
     val align: ClockAlign = ClockAlign.START,
     val sizeScale: Float = 1f,
+    val layout: LayoutStyle = LayoutStyle.STACKED,
     val zones: List<String> = emptyList(),
     // background
     val bgMode: BgMode = BgMode.THEME,
@@ -109,13 +112,16 @@ data class ClockSettings(
     // taps
     val tapType: TapType = TapType.ALARMS,
     val tapValue: String = "",
+    /** What tapping the date does; NONE means "same as the widget tap". */
+    val dateTapType: TapType = TapType.CALENDAR,
+    val dateTapValue: String = "",
     val showGear: Boolean = true,
 ) {
     /** Anything the plain RemoteViews/TextClock widget can't draw needs the bitmap renderer. */
     fun needsStyled(): Boolean =
         !fontKey.startsWith("sys:") || fontColorMode == FontColorMode.GRADIENT ||
             fontColorMode == FontColorMode.RAINBOW || bgMode == BgMode.GRADIENT || bgMode == BgMode.IMAGE || animation != DigitAnim.NONE ||
-            border != BorderStyle.NONE
+            border != BorderStyle.NONE || layout == LayoutStyle.SPLIT
 
     /** True when the widget must redraw continuously (not just on digit changes). */
     fun animatedStyle(): Boolean = border.animated || fontColorMode == FontColorMode.RAINBOW
@@ -156,6 +162,9 @@ data class ClockSettings(
         put("fontGradientKey", fontGradientKey)
         put("align", align.name)
         put("sizeScale", sizeScale.toDouble())
+        put("layout", layout.name)
+        put("dateTapType", dateTapType.name)
+        put("dateTapValue", dateTapValue)
         put("zones", JSONArray(zones))
         put("bgMode", bgMode.name)
         put("gradientKey", gradientKey)
@@ -202,7 +211,10 @@ data class ClockSettings(
                     fontColor = o.optInt("fontColor", d.fontColor),
                     fontGradientKey = o.optString("fontGradientKey", d.fontGradientKey),
                     align = o.enumOr("align", d.align),
-                    sizeScale = o.optDouble("sizeScale", d.sizeScale.toDouble()).toFloat().coerceIn(0.5f, 1.5f),
+                    sizeScale = o.optDouble("sizeScale", d.sizeScale.toDouble()).toFloat().coerceIn(0.5f, 1f),
+                    layout = o.enumOr("layout", d.layout),
+                    dateTapType = o.enumOr("dateTapType", d.dateTapType),
+                    dateTapValue = o.optString("dateTapValue", d.dateTapValue),
                     zones = if (zs == null) emptyList() else (0 until zs.length()).map { zs.getString(it) }.take(2),
                     bgMode = o.enumOr("bgMode", d.bgMode),
                     gradientKey = o.optString("gradientKey", d.gradientKey),

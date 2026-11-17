@@ -408,8 +408,10 @@ private fun LookTab(s: ClockSettings, set: (ClockSettings) -> Unit) {
     Section("Layout") {
         Text("Alignment", style = MaterialTheme.typography.labelLarge)
         ChipRow(ClockAlign.entries, s.align, { it.label }) { set(s.copy(align = it)) }
+        Text("Arrangement", style = MaterialTheme.typography.labelLarge)
+        ChipRow(LayoutStyle.entries, s.layout, { it.label }) { set(s.copy(layout = it)) }
         Text("Text size ${(s.sizeScale * 100).toInt()}%", style = MaterialTheme.typography.labelLarge)
-        Slider(value = s.sizeScale, onValueChange = { set(s.copy(sizeScale = it)) }, valueRange = 0.5f..1.5f)
+        Slider(value = s.sizeScale, onValueChange = { set(s.copy(sizeScale = it)) }, valueRange = 0.5f..1f)
     }
 }
 
@@ -542,6 +544,26 @@ private fun TapsTab(s: ClockSettings, set: (ClockSettings) -> Unit) {
                     FilterChip(
                         selected = s.tapValue == action || (s.tapValue.isEmpty() && action == TapActions.SYSTEM_SETTINGS[0].second),
                         onClick = { set(s.copy(tapValue = action)) },
+                        label = { Text(label) },
+                    )
+                }
+            }
+            else -> Unit
+        }
+    }
+    Section("When you tap the date, open") {
+        ChipRow(TapType.entries, s.dateTapType, { if (it == TapType.NONE) "Same as widget" else it.label }) {
+            set(s.copy(dateTapType = it, dateTapValue = ""))
+        }
+        when (s.dateTapType) {
+            TapType.APP -> AppPicker(s.dateTapValue) { set(s.copy(dateTapValue = it)) }
+            TapType.SYSTEM_SETTING -> FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                TapActions.SYSTEM_SETTINGS.forEach { (label, action) ->
+                    FilterChip(
+                        selected = s.dateTapValue == action || (s.dateTapValue.isEmpty() && action == TapActions.SYSTEM_SETTINGS[0].second),
+                        onClick = { set(s.copy(dateTapValue = action)) },
                         label = { Text(label) },
                     )
                 }

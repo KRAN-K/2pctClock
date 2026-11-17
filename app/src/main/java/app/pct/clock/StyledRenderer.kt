@@ -337,19 +337,107 @@ object StyledRenderer {
             return main + sz * 0.06f + tp.measureText(ampm)
         }
 
-        var timePx = area.height() / (1.15f + extras.size * 0.40f) * s.sizeScale
+        val scale = min(s.sizeScale, 1f)
+        val split = s.layout == LayoutStyle.SPLIT && extras.isNotEmpty()
+
+        fun extraPaint(text: String, color: Int, size: Float, maxW: Float): Paint {
+            val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = tf; textSize = size; this.color = color }
+            val w = p.measureText(text)
+            if (w > maxW && w > 0f) p.textSize = size * maxW / w
+            return p
+        }
+
+        // time, one glyph at a time so changed digits can animate
+        fun drawTime(x0: Float, timeBase: Float, timePx: Float, digitH: Float, lineW: Float) {
+            tp.textSize = timePx
+            val adv = advances(timeStr, tp)
+            var x = x0
+            for (i in timeStr.indices) {
+                val ch = timeStr[i]
+                val oldIdx = (anim?.prevText?.length ?: 0) - (timeStr.length - i)
+                val old = if (anim != null && oldIdx >= 0) anim.prevText[oldIdx] else null
+                val charColor = textColorAt(s, colors, (x - x0 + adv[i] / 2f) / lineW, phase)
+                drawGlyph(c, tf, ch, old, x, adv[i], timeBase, timePx, digitH, charColor, anim, s.animation, i)
+                x += adv[i]
+            }
+            if (ampm.isNotEmpty()) {
+                val ap = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    typeface = tf
+                    textSize = timePx * 0.32f
+                    color = textColorAt(s, colors, 1f, phase)
+                }
+                c.drawText(ampm, x + timePx * 0.06f, timeBase, ap)
+            }
+        }
+
+        fun digitHeight(timePx: Float): Float {
+            tp.textSize = timePx
+            val r = Rect()
+            tp.getTextBounds("0123456789", 0, 10, r)
+            return if (r.height() > 0) r.height().toFloat() else timePx * 0.7f
+        }
+
+        if (split) {
+            val gapPx = 10f * ppd
+            val divW = max(1f, 1.5f * ppd)
+            var timePx = area.height() / 1.15f * scale
+            val maxTimeW = area.width() * 0.58f
+            val tw = timeWidth(timePx)
+            if (tw > maxTimeW && tw > 0f) timePx *= maxTimeW / tw
+            timePx = timePx.coerceAtLeast(8f * ppd)
+            val timeW = timeWidth(timePx).coerceAtLeast(1f)
+            val digitH = digitHeight(timePx)
+
+            var subPx = min(area.height() / (extras.size * 1.25f), timePx * 0.34f).coerceAtLeast(8f * ppd)
+            val colAvail = (area.width() - timeW - 2 * gapPx - divW).coerceAtLeast(area.width() * 0.2f)
+            val sp = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = tf }
+            fun widest(sz: Float): Float { sp.textSize = sz; return extras.maxOf { sp.measureText(it.first) } }
+            val ww = widest(subPx)
+            if (ww > colAvail && ww > 0f) subPx *= colAvail / ww
+            val colW = min(widest(subPx), colAvail)
+            val subLine = subPx * 1.25f
+
+            val groupW = timeW + 2 * gapPx + divW + colW
+            val gx = when (s.align) {
+                ClockAlign.START -> area.left
+                ClockAlign.CENTER -> area.centerX() - groupW / 2f
+                ClockAlign.END -> area.right - groupW
+            }
+            drawTime(gx, area.centerY() + digitH / 2f, timePx, digitH, timeW)
+
+            val divX = gx + timeW + gapPx + divW / 2f
+            val colH = extras.size * subLine
+            val divH = min(area.height(), max(digitH * 1.15f, colH))
+            val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = colors.sub; alpha = 130; strokeWidth = divW; strokeCap = Paint.Cap.ROUND
+            }
+            c.drawLine(divX, area.centerY() - divH / 2f, divX, area.centerY() + divH / 2f, line)
+
+            var y = area.centerY() - colH / 2f
+            val colX = gx + timeW + 2 * gapPx + divW
+            for ((text, color) in extras) {
+                c.drawText(text, colX, y + subPx, extraPaint(text, color, subPx, colW))
+                y += subLine
+            }
+            return
+        }
+
+        var timePx = area.height() / (1.15f + extras.size * 0.40f) * scale
         val tw = timeWidth(timePx)
         if (tw > area.width() && tw > 0f) timePx *= area.width() / tw
         timePx = timePx.coerceAtLeast(8f * ppd)
-        val subPx = (timePx * 0.30f).coerceIn(11f * ppd, 26f * ppd).coerceAtMost(timePx)
-
-        tp.textSize = timePx
-        val r = Rect()
-        tp.getTextBounds("0123456789", 0, 10, r)
-        val digitH = if (r.height() > 0) r.height().toFloat() else timePx * 0.7f
-        val subLine = subPx * 1.25f
-        val gap = if (extras.isEmpty()) 0f else timePx * 0.2f
-        val total = digitH + gap + extras.size * subLine
+        var subPx = (timePx * 0.30f).coerceIn(11f * ppd, 26f * ppd).coerceAtMost(timePx)
+        var digitH = digitHeight(timePx)
+        var gap = if (extras.isEmpty()) 0f else timePx * 0.2f
+        var subLine = subPx * 1.25f
+        var total = digitH + gap + extras.size * subLine
+        // never let the date / extras fall off the bottom: shrink everything to fit the height
+        if (total > area.height() && total > 0f) {
+            val k = area.height() / total
+            timePx *= k; subPx *= k; subLine *= k; gap *= k
+            digitH = digitHeight(timePx)
+            total = digitH + gap + extras.size * subLine
+        }
         var y = area.centerY() - total / 2f
         val timeBase = y + digitH
 
@@ -359,39 +447,14 @@ object StyledRenderer {
             ClockAlign.END -> area.right - lineW
         }
 
-        // time, one glyph at a time so changed digits can animate
-        val adv = advances(timeStr, tp)
         val lineW = timeWidth(timePx).coerceAtLeast(1f)
-        val x0 = startX(lineW)
-        var x = x0
-        for (i in timeStr.indices) {
-            val ch = timeStr[i]
-            val oldIdx = (anim?.prevText?.length ?: 0) - (timeStr.length - i)
-            val old = if (anim != null && oldIdx >= 0) anim.prevText[oldIdx] else null
-            val charColor = textColorAt(s, colors, (x - x0 + adv[i] / 2f) / lineW, phase)
-            drawGlyph(c, tf, ch, old, x, adv[i], timeBase, timePx, digitH, charColor, anim, s.animation, i)
-            x += adv[i]
-        }
-        if (ampm.isNotEmpty()) {
-            val ap = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                typeface = tf
-                textSize = timePx * 0.32f
-                color = textColorAt(s, colors, 1f, phase)
-            }
-            c.drawText(ampm, x + timePx * 0.06f, timeBase, ap)
-        }
+        drawTime(startX(lineW), timeBase, timePx, digitH, lineW)
 
         // date, alarm, world clocks
         y = timeBase + gap
         for ((text, color) in extras) {
-            val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                typeface = tf
-                textSize = subPx
-                this.color = color
-            }
-            val w = p.measureText(text)
-            if (w > area.width() && w > 0f) p.textSize = subPx * area.width() / w
-            c.drawText(text, startX(min(w, area.width())), y + subPx, p)
+            val p = extraPaint(text, color, subPx, area.width())
+            c.drawText(text, startX(min(p.measureText(text), area.width())), y + subPx, p)
             y += subLine
         }
     }

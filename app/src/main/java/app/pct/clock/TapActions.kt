@@ -46,19 +46,35 @@ object TapActions {
         return settingsIntent(ctx, widgetId)
     }
 
-    private fun intentFor(ctx: Context, widgetId: Int, s: ClockSettings): Intent? = when (s.tapType) {
+    private fun calendarIntent(ctx: Context, widgetId: Int): Intent {
+        val pm = ctx.packageManager
+        val main = Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_CALENDAR)
+        if (main.resolveActivity(pm) != null) return main
+        val view = Intent(Intent.ACTION_VIEW, android.provider.CalendarContract.CONTENT_URI.buildUpon().appendPath("time").build())
+        if (view.resolveActivity(pm) != null) return view
+        for (pkg in listOf("com.google.android.calendar", "com.samsung.android.calendar", "com.android.calendar"))
+            pm.getLaunchIntentForPackage(pkg)?.let { return it }
+        return settingsIntent(ctx, widgetId)
+    }
+
+    private fun intentFor(ctx: Context, widgetId: Int, type: TapType, value: String): Intent? = when (type) {
         TapType.ALARMS -> clockIntent(ctx, widgetId, AlarmClock.ACTION_SHOW_ALARMS)
         TapType.TIMERS -> clockIntent(ctx, widgetId, AlarmClock.ACTION_SHOW_TIMERS)
-        TapType.CALENDAR -> Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_CALENDAR)
-        TapType.APP -> ctx.packageManager.getLaunchIntentForPackage(s.tapValue)
+        TapType.CALENDAR -> calendarIntent(ctx, widgetId)
+        TapType.APP -> ctx.packageManager.getLaunchIntentForPackage(value)
             ?: clockIntent(ctx, widgetId, AlarmClock.ACTION_SHOW_ALARMS)
-        TapType.SYSTEM_SETTING -> Intent(s.tapValue.ifEmpty { Settings.ACTION_SETTINGS })
+        TapType.SYSTEM_SETTING -> Intent(value.ifEmpty { Settings.ACTION_SETTINGS })
         TapType.CLOCK_SETTINGS -> settingsIntent(ctx, widgetId)
         TapType.NONE -> null
     }
 
     fun tapPending(ctx: Context, widgetId: Int, s: ClockSettings): PendingIntent? =
-        intentFor(ctx, widgetId, s)?.let { pending(ctx, widgetId * 10 + 1, it) }
+        intentFor(ctx, widgetId, s.tapType, s.tapValue)?.let { pending(ctx, widgetId * 10 + 1, it) }
+
+    /** Tap on the date; "Nothing" here means it behaves like the rest of the widget. */
+    fun datePending(ctx: Context, widgetId: Int, s: ClockSettings): PendingIntent? =
+        if (s.dateTapType == TapType.NONE) tapPending(ctx, widgetId, s)
+        else intentFor(ctx, widgetId, s.dateTapType, s.dateTapValue)?.let { pending(ctx, widgetId * 10 + 3, it) }
 
     fun gearPending(ctx: Context, widgetId: Int): PendingIntent =
         pending(ctx, widgetId * 10 + 2, settingsIntent(ctx, widgetId))

@@ -66,6 +66,16 @@ object WidgetRenderer {
             rv.setOnClickPendingIntent(R.id.root, it)
             rv.setOnClickPendingIntent(R.id.content, it)
         }
+        val dateTap = if (s.showDate) TapActions.datePending(ctx, id, s) else null
+        if (dateTap != null) {
+            if (s.fontKey.startsWith("sys:") && !s.needsStyled()) rv.setOnClickPendingIntent(R.id.date, dateTap)
+            else {
+                val split = s.layout == LayoutStyle.SPLIT
+                rv.setViewVisibility(R.id.date_hit_v, if (split) View.GONE else View.VISIBLE)
+                rv.setViewVisibility(R.id.date_hit_h, if (split) View.VISIBLE else View.GONE)
+                rv.setOnClickPendingIntent(if (split) R.id.date_hit_h_view else R.id.date_hit_v_view, dateTap)
+            }
+        }
         rv.setViewVisibility(R.id.gear, if (s.showGear) View.VISIBLE else View.GONE)
         rv.setOnClickPendingIntent(R.id.gear, TapActions.gearPending(ctx, id))
         val day = Palette.resolve(ctx, s, false)
@@ -174,7 +184,7 @@ object WidgetRenderer {
         val widthFactor = chars * 0.56f + (if (ampmOn) 0.5f else 0f)
         val byHeight = availH / (1.15f + extraRows * 0.40f)
         val byWidth = availW / widthFactor
-        val timeSp = (min(byHeight, byWidth) * s.sizeScale).coerceIn(14f, 160f)
+        val timeSp = (min(byHeight, byWidth) * min(s.sizeScale, 1f)).coerceIn(14f, 160f)
         val subSp = (timeSp * 0.30f).coerceIn(11f, 26f)
         rv.setTextViewTextSize(R.id.time, TypedValue.COMPLEX_UNIT_SP, timeSp)
         rv.setTextViewTextSize(R.id.ampm, TypedValue.COMPLEX_UNIT_SP, timeSp * 0.32f)
