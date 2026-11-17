@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">2%Clock</string>
+    <string name="widget_label">2%Clock</string>
+    <string name="widget_desc">Customizable clock with date, alarm and world clocks</string>
+    <string name="config_label">2%Clock settings</string>
+</resources>
