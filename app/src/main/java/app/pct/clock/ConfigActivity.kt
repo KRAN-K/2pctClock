@@ -269,13 +269,14 @@ private fun LivePreview(s: ClockSettings) {
                     animStart = real
                 }
                 lastText = text
+                val dur = s.animation.durationMs
                 val since = real - animStart
-                val anim = if (animStart > 0 && since < 700) AnimFrame(prev, since / 700f) else null
+                val anim = if (animStart > 0 && since < dur) AnimFrame(prev, since / dur.toFloat()) else null
                 val bmp = withContext(Dispatchers.Default) {
                     StyledRenderer.render(ctx, s, wDp, 150f, fake, anim, (real % 600_000L) / 1000f, dark)
                 }
                 value = bmp.asImageBitmap()
-                delay(if (anim != null || s.border.animated) 60L else if (secondsShown) 250L else 500L)
+                delay(if (anim != null || s.animatedStyle()) 60L else if (secondsShown) 250L else 500L)
             }
         }
         frame?.let {
@@ -347,25 +348,7 @@ private fun LookTab(s: ClockSettings, set: (ClockSettings) -> Unit) {
     Section("Background") {
         ChipRow(BgMode.entries, s.bgMode, { it.label }) { set(s.copy(bgMode = it)) }
         if (s.bgMode == BgMode.GRADIENT) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                BgStore.GRADIENTS.forEach { g ->
-                    val sel = g.key == s.gradientKey
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(
-                            Modifier.size(width = 64.dp, height = 40.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(Brush.linearGradient(g.colors.map { Color(it) }))
-                                .border(
-                                    if (sel) 3.dp else 1.dp,
-                                    if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                                    RoundedCornerShape(10.dp),
-                                )
-                                .clickable { set(s.copy(gradientKey = g.key)) },
-                        )
-                        Text(g.label, style = MaterialTheme.typography.labelSmall)
-                    }
-                }
-            }
+            GradientRow(s.gradientKey) { set(s.copy(gradientKey = it)) }
         }
         if (s.bgMode == BgMode.IMAGE) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -398,8 +381,10 @@ private fun LookTab(s: ClockSettings, set: (ClockSettings) -> Unit) {
             Text("Dim image ${s.bgDim}%", style = MaterialTheme.typography.labelLarge)
             Slider(value = s.bgDim.toFloat(), onValueChange = { set(s.copy(bgDim = it.toInt())) }, valueRange = 0f..80f)
         }
-        Text("Opacity ${s.bgOpacity}%", style = MaterialTheme.typography.labelLarge)
-        Slider(value = s.bgOpacity.toFloat(), onValueChange = { set(s.copy(bgOpacity = it.toInt())) }, valueRange = 0f..100f)
+        if (s.bgMode != BgMode.TRANSPARENT) {
+            Text("Opacity ${s.bgOpacity}%", style = MaterialTheme.typography.labelLarge)
+            Slider(value = s.bgOpacity.toFloat(), onValueChange = { set(s.copy(bgOpacity = it.toInt())) }, valueRange = 0f..100f)
+        }
         Text("Corners", style = MaterialTheme.typography.labelLarge)
         ChipRow(CORNER_NAMES.indices.toList(), s.cornerStyle, { CORNER_NAMES[it] }) { set(s.copy(cornerStyle = it)) }
     }
@@ -468,6 +453,18 @@ private fun FontTab(s: ClockSettings, set: (ClockSettings) -> Unit) {
         }
     }
 
+    Section("Text color") {
+        ChipRow(FontColorMode.entries, s.fontColorMode, { it.label }) { set(s.copy(fontColorMode = it)) }
+        when (s.fontColorMode) {
+            FontColorMode.CUSTOM -> ColorPicker("Text color", s.fontColor) { set(s.copy(fontColor = it)) }
+            FontColorMode.GRADIENT -> GradientRow(s.fontGradientKey) { set(s.copy(fontGradientKey = it)) }
+            FontColorMode.RAINBOW -> Text(
+                "Colors cycle across the digits. Runs on the effects service while the screen is on.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            FontColorMode.THEME -> Text("Uses the color theme from the Look tab.", style = MaterialTheme.typography.bodySmall)
+        }
+    }
     Section("Built-in") { fontChips(FontStore.SYSTEM) }
     Section("Bundled (open license)") { fontChips(FontStore.BUNDLED) }
     Section("Your fonts") {
@@ -576,6 +573,30 @@ private fun AppTab(
 }
 
 // ---------------------------------------------------------------------- pieces
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun GradientRow(selectedKey: String, onSelect: (String) -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        BgStore.GRADIENTS.forEach { g ->
+            val sel = g.key == selectedKey
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    Modifier.size(width = 64.dp, height = 40.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Brush.linearGradient(g.colors.map { Color(it) }))
+                        .border(
+                            if (sel) 3.dp else 1.dp,
+                            if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                            RoundedCornerShape(10.dp),
+                        )
+                        .clickable { onSelect(g.key) },
+                )
+                Text(g.label, style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    }
+}
 
 @Composable
 private fun Section(title: String, content: @Composable () -> Unit) {

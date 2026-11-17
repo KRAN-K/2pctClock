@@ -142,9 +142,10 @@ class ClockEngineService : Service() {
             }
             st.text = text
 
+            val dur = s.animation.durationMs
             val since = now - st.animStart
-            val animating = st.animStart > 0 && since < ANIM_MS
-            val anim = if (animating) AnimFrame(st.prev, since / ANIM_MS.toFloat()) else null
+            val animating = st.animStart > 0 && since < dur
+            val anim = if (animating) AnimFrame(st.prev, since / dur.toFloat()) else null
 
             val opts = mgr.getAppWidgetOptions(id)
             val wDp = opts.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 250).toFloat()
@@ -156,7 +157,7 @@ class ClockEngineService : Service() {
 
             val d = when {
                 animating -> 60L
-                s.border.animated -> 90L
+                s.animatedStyle() -> 90L
                 secondsShown -> msToNext(1000L, now)
                 else -> msToNext(60_000L, now)
             }
@@ -174,7 +175,6 @@ class ClockEngineService : Service() {
         const val ACTION_REFRESH = "app.pct.clock.REFRESH"
         private const val CHANNEL = "engine"
         private const val NOTIF_ID = 1
-        private const val ANIM_MS = 700L
 
         /** Start the engine if any widget needs it, stop it if none does. */
         fun sync(ctx: Context, refresh: Boolean = false) {

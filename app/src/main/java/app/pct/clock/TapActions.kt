@@ -27,12 +27,31 @@ object TapActions {
             .setAction(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE)
             .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
 
+    private val CLOCK_PACKAGES = listOf(
+        "com.google.android.deskclock", "com.sec.android.app.clockpackage", "com.android.deskclock",
+        "com.oneplus.deskclock", "com.huawei.deskclock", "com.coloros.alarmclock", "com.vivo.alarmclock",
+    )
+
+    /**
+     * Implicit alarm/timer intents are silently dropped on some phones, which looks like "nothing happens".
+     * Resolve the actual clock activity and target it explicitly, then fall back to launching the clock app,
+     * and finally to our own settings so a tap always does something.
+     */
+    private fun clockIntent(ctx: Context, widgetId: Int, action: String): Intent {
+        val pm = ctx.packageManager
+        val match = pm.queryIntentActivities(Intent(action), 0)
+            .firstOrNull { it.activityInfo.packageName != "android" && it.activityInfo.exported }
+        if (match != null) return Intent(action).setClassName(match.activityInfo.packageName, match.activityInfo.name)
+        for (pkg in CLOCK_PACKAGES) pm.getLaunchIntentForPackage(pkg)?.let { return it }
+        return settingsIntent(ctx, widgetId)
+    }
+
     private fun intentFor(ctx: Context, widgetId: Int, s: ClockSettings): Intent? = when (s.tapType) {
-        TapType.ALARMS -> Intent(AlarmClock.ACTION_SHOW_ALARMS)
-        TapType.TIMERS -> Intent(AlarmClock.ACTION_SHOW_TIMERS)
+        TapType.ALARMS -> clockIntent(ctx, widgetId, AlarmClock.ACTION_SHOW_ALARMS)
+        TapType.TIMERS -> clockIntent(ctx, widgetId, AlarmClock.ACTION_SHOW_TIMERS)
         TapType.CALENDAR -> Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_CALENDAR)
         TapType.APP -> ctx.packageManager.getLaunchIntentForPackage(s.tapValue)
-            ?: Intent(AlarmClock.ACTION_SHOW_ALARMS)
+            ?: clockIntent(ctx, widgetId, AlarmClock.ACTION_SHOW_ALARMS)
         TapType.SYSTEM_SETTING -> Intent(s.tapValue.ifEmpty { Settings.ACTION_SETTINGS })
         TapType.CLOCK_SETTINGS -> settingsIntent(ctx, widgetId)
         TapType.NONE -> null

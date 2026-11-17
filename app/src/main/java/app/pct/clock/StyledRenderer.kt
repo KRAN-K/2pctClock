@@ -62,7 +62,7 @@ object StyledRenderer {
         val c = Canvas(bmp)
         val colors = Palette.resolve(ctx, s, night)
 
-        val flame = if (s.border == BorderStyle.FIRE) 15f * ppd else 0f
+        val flame = if (s.border == BorderStyle.FIRE) min(24f * ppd, min(w, h) * 0.24f) else 0f
         val box = RectF(flame, flame, w - flame, h - flame)
         val radius = min(CORNER_DP[s.cornerStyle] * ppd, min(box.width(), box.height()) / 2f)
         val bw = s.borderWidth * ppd
@@ -72,7 +72,7 @@ object StyledRenderer {
         drawBorder(c, s, box, radius, bw, phase)
         val pad = 12f * ppd + (if (s.border != BorderStyle.NONE) bw else 0f)
         val area = RectF(box).apply { inset(pad, pad) }
-        drawContent(ctx, c, s, colors, area, anim, ppd, now)
+        drawContent(ctx, c, s, colors, area, anim, ppd, now, phase)
         return bmp
     }
 
@@ -84,6 +84,7 @@ object StyledRenderer {
         c.clipPath(Path().apply { addRoundRect(box, radius, radius, Path.Direction.CW) })
         val p = Paint(Paint.ANTI_ALIAS_FLAG)
         when (s.bgMode) {
+            BgMode.TRANSPARENT -> Unit
             BgMode.THEME -> {
                 p.color = colors.bg
                 p.alpha = alpha
@@ -190,54 +191,117 @@ object StyledRenderer {
         }
     }
 
-    /** Flames licking outward from the rounded-rect edge; they live in the [flame]-wide margin. */
+    /** One flame tongue: wide base, S-curved sides, pointed tip. (dx,dy) = direction, (tx,ty) = along the edge. */
+    private fun flamePath(
+        path: Path, bx: Float, by: Float, dx: Float, dy: Float, tx: Float, ty: Float,
+        w: Float, h: Float, sway: Float,
+    ) {
+        path.reset()
+        val l0x = bx - tx * w / 2
+        val l0y = by - ty * w / 2
+        val r0x = bx + tx * w / 2
+        val r0y = by + ty * w / 2
+        val tipx = bx + dx * h + tx * sway
+        val tipy = by + dy * h + ty * sway
+        path.moveTo(l0x, l0y)
+        path.cubicTo(
+            l0x - tx * w * 0.15f + dx * h * 0.35f, l0y - ty * w * 0.15f + dy * h * 0.35f,
+            bx - tx * w * 0.25f + dx * h * 0.75f + tx * sway * 0.6f, by - ty * w * 0.25f + dy * h * 0.75f + ty * sway * 0.6f,
+            tipx, tipy,
+        )
+        path.cubicTo(
+            bx + tx * w * 0.25f + dx * h * 0.7f + tx * sway * 0.6f, by + ty * w * 0.25f + dy * h * 0.7f + ty * sway * 0.6f,
+            r0x + tx * w * 0.15f + dx * h * 0.35f, r0y + ty * w * 0.15f + dy * h * 0.35f,
+            r0x, r0y,
+        )
+        path.close()
+    }
+
+    private val FLAME_COLORS = intArrayOf(0xFFFFF59D.toInt(), 0xFFFF9100.toInt(), 0xFFE53935.toInt(), 0x00B71C1C)
+    private val FLAME_POS = floatArrayOf(0f, 0.35f, 0.72f, 1f)
+
+    /**
+     * A wall of fire around the widget: many overlapping tongues that rise upward (leaning outward
+     * on the sides), flicker at different rates, with a traveling wave and drifting sparks.
+     */
     private fun drawFlames(c: Canvas, box: RectF, radius: Float, flame: Float, phase: Float, ppd: Float) {
         val path = Path().apply { addRoundRect(box, radius, radius, Path.Direction.CW) }
         val pm = PathMeasure(path, true)
         val len = pm.length
         if (len <= 0f) return
-        val step = 7f * ppd
-        val n = max(8, (len / step).toInt())
+        val step = 8f * ppd
+        val n = max(10, (len / step).toInt())
         val pos = FloatArray(2)
         val tan = FloatArray(2)
-        val layers = arrayOf(
-            Triple(0xCCFF3D00.toInt(), 1.0f, 1.0f),
-            Triple(0xDDFF9100.toInt(), 0.7f, 0.75f),
-            Triple(0xEEFFEB3B.toInt(), 0.4f, 0.5f),
-        )
+        val shape = Path()
         val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-        for (i in 0 until n) {
-            pm.getPosTan(i * len / n, pos, tan)
-            val nx = tan[1]
-            val ny = -tan[0]
-            val wob = sin(phase * 6.0 + i * 0.9) * 0.5 + sin(phase * 9.3 + i * 1.7) * 0.35 + sin(phase * 3.1 + i * 0.31) * 0.15
-            val h = flame * (0.55f + 0.45f * wob.toFloat()).coerceAtLeast(0.2f)
-            val sway = (sin(phase * 7.0 + i) * h * 0.25).toFloat()
-            for ((color, wf, hf) in layers) {
-                val hw = step * 0.9f * wf
-                val hh = h * hf
-                val bx = pos[0]
-                val by = pos[1]
-                val path2 = Path()
-                path2.moveTo(bx - tan[0] * hw / 2, by - tan[1] * hw / 2)
-                path2.quadTo(
-                    bx - tan[0] * hw * 0.5f + nx * hh * 0.6f + tan[0] * sway * 0.3f,
-                    by - tan[1] * hw * 0.5f + ny * hh * 0.6f + tan[1] * sway * 0.3f,
-                    bx + nx * hh + tan[0] * sway, by + ny * hh + tan[1] * sway,
+        for (pass in 0..1) { // pass 0: big outer flames, pass 1: smaller bright inner flames
+            for (i in 0 until n) {
+                pm.getPosTan(i * len / n, pos, tan)
+                var nx = tan[1]
+                var ny = -tan[0]
+                // make the normal point away from the box center whatever the path winding is
+                if ((pos[0] - box.centerX()) * nx + (pos[1] - box.centerY()) * ny < 0f) {
+                    nx = -nx
+                    ny = -ny
+                }
+                val bottom = ny > 0.4f
+                var dx = nx * 0.8f
+                var dy = ny * 0.8f - (if (bottom) 0f else 0.9f)
+                val dl = sqrt(dx * dx + dy * dy).coerceAtLeast(0.001f)
+                dx /= dl
+                dy /= dl
+                val s1 = sin(phase * 5.3 + i * 0.83)
+                val s2 = sin(phase * 8.1 + i * 1.91)
+                val s3 = sin(phase * 2.7 - i * 0.37) // slow traveling wave
+                val burst = max(0.0, sin(i * 1.37 + phase * 2.3))
+                val noise = (0.5 + 0.25 * s1 + 0.15 * s2 + 0.25 * s3 + 0.35 * burst).coerceIn(0.2, 1.4)
+                var h = (flame * noise).toFloat() * (if (bottom) 0.4f else 1f)
+                var w = step * 1.9f
+                if (pass == 1) {
+                    h *= 0.62f
+                    w *= 0.55f
+                }
+                val sway = (sin(phase * 6.0 + i * 0.7) * w * 0.35).toFloat()
+                val tipX = pos[0] + dx * h
+                val tipY = pos[1] + dy * h
+                flamePath(shape, pos[0], pos[1], dx, dy, tan[0], tan[1], w, h, sway)
+                p.shader = LinearGradient(
+                    pos[0], pos[1], tipX, tipY,
+                    if (pass == 0) FLAME_COLORS else intArrayOf(0xFFFFFFFF.toInt(), 0xFFFFEB3B.toInt(), 0xFFFF9100.toInt(), 0x00FF5722),
+                    FLAME_POS, Shader.TileMode.CLAMP,
                 )
-                path2.quadTo(
-                    bx + tan[0] * hw * 0.5f + nx * hh * 0.6f + tan[0] * sway * 0.3f,
-                    by + tan[1] * hw * 0.5f + ny * hh * 0.6f + tan[1] * sway * 0.3f,
-                    bx + tan[0] * hw / 2, by + tan[1] * hw / 2,
-                )
-                path2.close()
-                p.color = color
-                c.drawPath(path2, p)
+                c.drawPath(shape, p)
             }
+        }
+        p.shader = null
+        // sparks drifting up from the top edge
+        for (k in 0 until 16) {
+            val life = (phase * 0.9f + rnd(k * 7 + 1)) % 1f
+            val sx = box.left + rnd(k * 7 + 2) * box.width() + sin(life * 6f + k) * 4f * ppd
+            val sy = box.top - life * flame * 1.1f
+            p.color = ColorUtils.blendARGB(0xFFFFEB3B.toInt(), 0xFFFF3D00.toInt(), life)
+            p.alpha = ((1f - life) * 255).toInt()
+            c.drawCircle(sx, sy, max(0.8f, (1f - life) * 2.2f * ppd), p)
         }
     }
 
     // ------------------------------------------------------------------ text
+
+    private fun sampleGradient(cols: IntArray, f: Float): Int {
+        val pp = f.coerceIn(0f, 1f) * (cols.size - 1)
+        val i = pp.toInt().coerceAtMost(cols.size - 2)
+        return ColorUtils.blendARGB(cols[i], cols[i + 1], pp - i)
+    }
+
+    /** Text color at [frac] (0..1) across the time line; solid unless gradient/rainbow is chosen. */
+    private fun textColorAt(s: ClockSettings, colors: WidgetColors, frac: Float, phase: Float): Int = when (s.fontColorMode) {
+        FontColorMode.THEME, FontColorMode.CUSTOM -> colors.text
+        FontColorMode.GRADIENT -> sampleGradient(BgStore.gradient(s.fontGradientKey).colors, frac)
+        FontColorMode.RAINBOW -> Color.HSVToColor(
+            floatArrayOf((((phase * 70f + frac * 220f) % 360f) + 360f) % 360f, 0.7f, 1f),
+        )
+    }
 
     private fun advances(str: String, p: Paint): FloatArray {
         val a = FloatArray(str.length)
@@ -247,7 +311,7 @@ object StyledRenderer {
 
     private fun drawContent(
         ctx: Context, c: Canvas, s: ClockSettings, colors: WidgetColors,
-        area: RectF, anim: AnimFrame?, ppd: Float, now: Long,
+        area: RectF, anim: AnimFrame?, ppd: Float, now: Long, phase: Float,
     ) {
         val tf = FontStore.typeface(ctx, s.fontKey)
         val loc = Locale.getDefault()
@@ -256,7 +320,7 @@ object StyledRenderer {
         val ampm = if (s.showAmPmNow(system24)) SimpleDateFormat("a", loc).format(Date(now)) else ""
 
         val extras = ArrayList<Pair<String, Int>>() // text, color
-        if (s.showDate) extras += SimpleDateFormat(s.datePattern(), loc).format(Date(now)) to colors.text
+        if (s.showDate) extras += SimpleDateFormat(s.datePattern(), loc).format(Date(now)) to textColorAt(s, colors, 0.5f, phase)
         if (s.showAlarm) WidgetRenderer.nextAlarmText(ctx)?.let { extras += it to colors.sub }
         for (z in s.zones.take(2)) {
             val f = SimpleDateFormat(s.zonePattern(system24), loc)
@@ -297,20 +361,22 @@ object StyledRenderer {
 
         // time, one glyph at a time so changed digits can animate
         val adv = advances(timeStr, tp)
-        val x0 = startX(timeWidth(timePx))
+        val lineW = timeWidth(timePx).coerceAtLeast(1f)
+        val x0 = startX(lineW)
         var x = x0
         for (i in timeStr.indices) {
             val ch = timeStr[i]
             val oldIdx = (anim?.prevText?.length ?: 0) - (timeStr.length - i)
             val old = if (anim != null && oldIdx >= 0) anim.prevText[oldIdx] else null
-            drawGlyph(c, tf, ch, old, x, adv[i], timeBase, timePx, digitH, colors.text, anim, s.animation, i)
+            val charColor = textColorAt(s, colors, (x - x0 + adv[i] / 2f) / lineW, phase)
+            drawGlyph(c, tf, ch, old, x, adv[i], timeBase, timePx, digitH, charColor, anim, s.animation, i)
             x += adv[i]
         }
         if (ampm.isNotEmpty()) {
             val ap = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 typeface = tf
                 textSize = timePx * 0.32f
-                color = colors.text
+                color = textColorAt(s, colors, 1f, phase)
             }
             c.drawText(ampm, x + timePx * 0.06f, timeBase, ap)
         }
@@ -406,61 +472,101 @@ object StyledRenderer {
                 }
             }
             DigitAnim.FIRE -> {
-                val hot = ColorUtils.blendARGB(0xFFFFE066.toInt(), 0xFFFF3D00.toInt(), t)
-                val col = ColorUtils.blendARGB(hot, baseColor, t * t)
-                if (t < 0.5f) {
-                    p.setShadowLayer(digitH * 0.3f, 0f, 0f, orange)
-                    g(o, x, base, ColorUtils.blendARGB(baseColor, orange, t * 2f), 1f - t * 2f)
+                // Real flame tongues rise through the digit, the old digit is consumed,
+                // and the new one emerges white-hot and cools to its color.
+                val env = sin(Math.PI * t).toFloat().coerceAtLeast(0f)
+                if (t < 0.45f) {
+                    p.setShadowLayer(digitH * 0.25f, 0f, 0f, orange)
+                    g(o, x, base, ColorUtils.blendARGB(baseColor, 0xFFFF9100.toInt(), t / 0.45f), 1f - t / 0.45f)
                     p.clearShadowLayer()
                 }
-                p.setShadowLayer(max(0.1f, digitH * 0.35f * (1f - t)), 0f, 0f, orange)
-                g(ch, x, base, col, min(1f, t * 3f))
-                p.clearShadowLayer()
-                for (k in 0 until 14) {
+                val nt = ((t - 0.3f) / 0.7f).coerceIn(0f, 1f)
+                val tongues = 6
+                val fpaint = Paint(Paint.ANTI_ALIAS_FLAG)
+                val shape = Path()
+                for (k in 0 until tongues) {
+                    val sd = idx * 131 + k * 17
+                    val fx = x + adv * (k + 0.5f) / tongues
+                    val flick = 0.6f + 0.4f * sin(t * 22f + rnd(sd) * 6.28f)
+                    val h = digitH * (0.55f + 0.9f * rnd(sd + 1)) * env * flick
+                    if (h < 2f) continue
+                    val w = adv / tongues * 1.9f
+                    val sway = sin(t * 14f + k * 1.9f) * w * 0.45f
+                    val by = base + digitH * 0.05f
+                    flamePath(shape, fx, by, 0f, -1f, 1f, 0f, w, h, sway)
+                    fpaint.shader = LinearGradient(fx, by, fx, by - h, FLAME_COLORS, FLAME_POS, Shader.TileMode.CLAMP)
+                    c.drawPath(shape, fpaint)
+                }
+                if (nt > 0f) {
+                    p.setShadowLayer(max(0.1f, digitH * 0.35f * (1f - nt)), 0f, 0f, orange)
+                    g(ch, x, base, ColorUtils.blendARGB(0xFFFFF59D.toInt(), baseColor, nt), min(1f, nt * 3f))
+                    p.clearShadowLayer()
+                }
+                for (k in 0 until 8) {
                     val sd = idx * 977 + k * 31
                     val life = (t * 1.3f + rnd(sd + 1)) % 1f
                     spark(
-                        x + rnd(sd + 2) * adv,
-                        base - digitH * 0.1f - rnd(sd + 3) * digitH * 0.7f - life * digitH * 0.8f,
-                        (1f - life) * digitH * 0.08f * (0.5f + rnd(sd + 4)),
-                        ColorUtils.blendARGB(0xFFFFEB3B.toInt(), 0xFFFF3D00.toInt(), life),
-                        (1f - life) * (1f - t * 0.6f),
+                        x + rnd(sd + 2) * adv, base - digitH * 0.3f - life * digitH * 1.0f,
+                        (1f - life) * digitH * 0.06f,
+                        ColorUtils.blendARGB(0xFFFFEB3B.toInt(), 0xFFFF3D00.toInt(), life), (1f - life) * env,
                     )
                 }
             }
             DigitAnim.BURN -> {
-                val charred = ColorUtils.blendARGB(baseColor, 0xFF1A0F08.toInt(), min(1f, t * 2.2f))
-                if (t < 0.7f) {
-                    p.setShadowLayer(digitH * 0.2f, 0f, 0f, orange)
-                    g(o, x, base, charred, 1f - t / 0.7f)
+                // A burn line sweeps up the digit like paper: intact above, charred band, glowing edge,
+                // nothing below. Smoke and ash drift off it, then the new digit forms out of the ash.
+                val prog = (t / 0.7f).coerceIn(0f, 1f)
+                val band = digitH * 0.2f
+                val lineY = base + band * 0.5f - prog * (digitH * 1.15f + band)
+                val topY = base - digitH * 1.6f
+                val padX = adv * 0.3f
+                if (prog < 1f) {
+                    c.save()
+                    c.clipRect(x - padX, topY, x + adv + padX, lineY - band)
+                    g(o, x, base, baseColor, 1f)
+                    c.restore()
+                    c.save()
+                    c.clipRect(x - padX, lineY - band, x + adv + padX, lineY)
+                    g(o, x, base, 0xFF5A3A22.toInt(), 1f)
+                    c.restore()
+                    c.save()
+                    c.clipRect(x - padX, lineY - band * 0.4f, x + adv + padX, lineY + band * 0.2f)
+                    p.setShadowLayer(digitH * 0.22f, 0f, 0f, orange)
+                    g(o, x, base, 0xFFFF6A00.toInt(), 1f)
                     p.clearShadowLayer()
+                    c.restore()
+                    for (k in 0 until 9) { // smoke
+                        val sd = idx * 733 + k * 19
+                        val life = (t * 1.6f + rnd(sd)) % 1f
+                        spark(
+                            x + rnd(sd + 1) * adv + sin(life * 5f + k) * adv * 0.1f, lineY - life * digitH * 0.9f,
+                            digitH * (0.03f + 0.05f * life), 0xFF9E9E9E.toInt(), (1f - life) * 0.28f,
+                        )
+                    }
+                    for (k in 0 until 8) { // ash flakes falling from the line
+                        val sd = idx * 541 + k * 13
+                        val life = (t * 2.0f + rnd(sd)) % 1f
+                        spark(
+                            x + rnd(sd + 1) * adv, lineY + life * digitH * 0.7f,
+                            digitH * 0.025f, 0xFF616161.toInt(), (1f - life) * 0.8f,
+                        )
+                    }
+                    for (k in 0 until 6) { // embers hopping off the edge
+                        val sd = idx * 311 + k * 7
+                        val life = (t * 2.6f + rnd(sd)) % 1f
+                        spark(
+                            x + rnd(sd + 1) * adv, lineY - life * digitH * 0.5f,
+                            digitH * 0.03f, ColorUtils.blendARGB(0xFFFFC107.toInt(), 0xFFFF3D00.toInt(), life), 1f - life,
+                        )
+                    }
                 }
-                val nt = ((t - 0.45f) / 0.55f).coerceIn(0f, 1f)
+                val nt = ((t - 0.6f) / 0.3f).coerceIn(0f, 1f)
                 if (nt > 0f) {
-                    p.setShadowLayer(max(0.1f, digitH * 0.3f * (1f - nt)), 0f, 0f, 0xFFFF8A00.toInt())
-                    g(ch, x, base, ColorUtils.blendARGB(0xFFFF8A00.toInt(), baseColor, nt), nt)
-                    p.clearShadowLayer()
-                }
-                for (k in 0 until 10) {
-                    val sd = idx * 733 + k * 17
-                    val life = (t * 1.1f + rnd(sd + 1)) % 1f
-                    spark(
-                        x + rnd(sd + 2) * adv,
-                        base - rnd(sd + 3) * digitH * 0.6f - life * digitH * 0.7f,
-                        digitH * 0.04f * (0.5f + rnd(sd + 4)),
-                        ColorUtils.blendARGB(0xFFFFC107.toInt(), 0xFFFF3D00.toInt(), life),
-                        (1f - life) * (if (t < 0.9f) 1f else (1f - t) * 10f),
-                    )
-                }
-                for (k in 0 until 8) {
-                    val sd = idx * 541 + k * 13
-                    spark(
-                        x + rnd(sd + 1) * adv + sin(t * 6f + k) * adv * 0.1f,
-                        base - digitH * rnd(sd + 2) * 0.8f + t * digitH * rnd(sd + 3) * 0.9f,
-                        digitH * 0.025f,
-                        0xFF9E9E9E.toInt(),
-                        (1f - t) * 0.8f,
-                    )
+                    val sc = 0.92f + 0.08f * nt
+                    c.save()
+                    c.scale(sc, sc, x + adv / 2f, base)
+                    g(ch, x, base, ColorUtils.blendARGB(0xFF8D8D8D.toInt(), baseColor, nt), nt)
+                    c.restore()
                 }
             }
             DigitAnim.WATER -> {

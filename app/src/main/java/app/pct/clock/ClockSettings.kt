@@ -24,9 +24,9 @@ enum class ThemeMode(val label: String) {
 
 enum class ClockAlign(val label: String) { START("Left"), CENTER("Center"), END("Right") }
 
-enum class DigitAnim(val label: String) {
-    NONE("None"), ROLL("Roll"), FADE("Fade"), POP("Pop"),
-    FLICKER("Flicker"), FIRE("Fire"), BURN("Burn"), WATER("Water"),
+enum class DigitAnim(val label: String, val durationMs: Int) {
+    NONE("None", 0), ROLL("Roll", 450), FADE("Fade", 450), POP("Pop", 500),
+    FLICKER("Flicker", 600), FIRE("Fire", 900), BURN("Burn", 1300), WATER("Water", 900),
 }
 
 enum class AnimUnit(val label: String) { MINUTE("Every minute"), SECOND("Every second") }
@@ -41,7 +41,13 @@ enum class BorderStyle(val label: String, val animated: Boolean) {
     FIRE("Fire", true),
 }
 
-enum class BgMode(val label: String) { THEME("Solid"), GRADIENT("Gradient"), IMAGE("Image") }
+enum class FontColorMode(val label: String) {
+    THEME("Theme"), CUSTOM("Custom"), GRADIENT("Gradient"), RAINBOW("Rainbow (animated)"),
+}
+
+enum class BgMode(val label: String) {
+    THEME("Solid"), TRANSPARENT("Transparent"), GRADIENT("Gradient"), IMAGE("Image"),
+}
 
 enum class TapType(val label: String) {
     ALARMS("Alarms"),
@@ -82,6 +88,9 @@ data class ClockSettings(
     val bgOpacity: Int = 85,
     val cornerStyle: Int = 2,
     val fontKey: String = "sys:light",
+    val fontColorMode: FontColorMode = FontColorMode.THEME,
+    val fontColor: Int = 0xFFFFD54F.toInt(),
+    val fontGradientKey: String = "sunset",
     val align: ClockAlign = ClockAlign.START,
     val sizeScale: Float = 1f,
     val zones: List<String> = emptyList(),
@@ -104,8 +113,12 @@ data class ClockSettings(
 ) {
     /** Anything the plain RemoteViews/TextClock widget can't draw needs the bitmap renderer. */
     fun needsStyled(): Boolean =
-        !fontKey.startsWith("sys:") || bgMode != BgMode.THEME || animation != DigitAnim.NONE ||
+        !fontKey.startsWith("sys:") || fontColorMode == FontColorMode.GRADIENT ||
+            fontColorMode == FontColorMode.RAINBOW || bgMode == BgMode.GRADIENT || bgMode == BgMode.IMAGE || animation != DigitAnim.NONE ||
             border != BorderStyle.NONE
+
+    /** True when the widget must redraw continuously (not just on digit changes). */
+    fun animatedStyle(): Boolean = border.animated || fontColorMode == FontColorMode.RAINBOW
 
     fun use24(system24: Boolean): Boolean = when (timeFormat) {
         TimeFormat.SYSTEM -> system24
@@ -138,6 +151,9 @@ data class ClockSettings(
         put("bgOpacity", bgOpacity)
         put("cornerStyle", cornerStyle)
         put("fontKey", fontKey)
+        put("fontColorMode", fontColorMode.name)
+        put("fontColor", fontColor)
+        put("fontGradientKey", fontGradientKey)
         put("align", align.name)
         put("sizeScale", sizeScale.toDouble())
         put("zones", JSONArray(zones))
@@ -182,6 +198,9 @@ data class ClockSettings(
                     bgOpacity = o.optInt("bgOpacity", d.bgOpacity).coerceIn(0, 100),
                     cornerStyle = o.optInt("cornerStyle", d.cornerStyle).coerceIn(0, CORNER_DP.size - 1),
                     fontKey = fontKey,
+                    fontColorMode = o.enumOr("fontColorMode", d.fontColorMode),
+                    fontColor = o.optInt("fontColor", d.fontColor),
+                    fontGradientKey = o.optString("fontGradientKey", d.fontGradientKey),
                     align = o.enumOr("align", d.align),
                     sizeScale = o.optDouble("sizeScale", d.sizeScale.toDouble()).toFloat().coerceIn(0.5f, 1.5f),
                     zones = if (zs == null) emptyList() else (0 until zs.length()).map { zs.getString(it) }.take(2),

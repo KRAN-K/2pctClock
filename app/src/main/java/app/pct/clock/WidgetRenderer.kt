@@ -106,7 +106,10 @@ object WidgetRenderer {
         // ---- background
         rv.setImageViewResource(R.id.bg, BG_RES[s.cornerStyle.coerceIn(0, BG_RES.lastIndex)])
         color(R.id.bg, "setColorFilter", day.bg, nt.bg)
-        rv.setInt(R.id.bg, "setImageAlpha", s.bgOpacity.coerceIn(0, 100) * 255 / 100)
+        rv.setInt(
+            R.id.bg, "setImageAlpha",
+            if (s.bgMode == BgMode.TRANSPARENT) 0 else s.bgOpacity.coerceIn(0, 100) * 255 / 100,
+        )
 
         // ---- time
         val sec = if (s.showSeconds) ":ss" else ""
