@@ -1,14 +1,11 @@
 package app.pct.clock
 
 import android.app.AlarmManager
-import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
-import android.content.Intent
 import android.content.res.Configuration
 import android.os.Build
-import android.provider.AlarmClock
 import android.text.format.DateFormat
 import android.util.TypedValue
 import android.view.Gravity
@@ -22,8 +19,10 @@ import kotlin.math.min
 /**
  * Builds the widget's RemoteViews.
  *
- * Time, date, AM/PM and world clocks are TextClock views, so the system ticks them
- * (and rolls the date over at midnight) with no alarms or services on our side.
+ * Plain styles use TextClock views, so the system ticks them (and rolls the date over at
+ * midnight) with no alarms or services. Styles that need custom drawing (custom fonts,
+ * backgrounds, borders, animations) are drawn by [StyledRenderer] and kept fresh by
+ * [ClockEngineService].
  */
 object WidgetRenderer {
 
@@ -42,31 +41,61 @@ object WidgetRenderer {
         val opts = mgr.getAppWidgetOptions(id)
         val w = opts.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 250).toFloat()
         val h = opts.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 110).toFloat()
-        mgr.updateAppWidget(id, build(ctx, id, s, w, h))
+        val rv = if (s.needsStyled()) buildStyled(ctx, id, s, w, h) else build(ctx, id, s, w, h)
+        mgr.updateAppWidget(id, rv)
     }
 
-    fun build(ctx: Context, id: Int, s: ClockSettings, wDp: Float, hDp: Float): RemoteViews {
-        val layout = when (s.font) {
-            ClockFont.SANS -> R.layout.clock_widget_sans
-            ClockFont.LIGHT -> R.layout.clock_widget_light
-            ClockFont.CONDENSED -> R.layout.clock_widget_condensed
-            ClockFont.SERIF -> R.layout.clock_widget_serif
-            ClockFont.MONO -> R.layout.clock_widget_mono
-        }
-        val rv = RemoteViews(ctx.packageName, layout)
+    private fun isNight(ctx: Context) =
+        (ctx.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
 
-        // ---- colors (day/night pair; API 34+ switches automatically, older APIs at update time)
-        val night = (ctx.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
-            Configuration.UI_MODE_NIGHT_YES
-        val day = Palette.resolve(ctx, s, false)
-        val nt = Palette.resolve(ctx, s, true)
-        fun color(viewId: Int, method: String, d: Int, n: Int) {
+    private fun colorSetter(ctx: Context, rv: RemoteViews): (Int, String, Int, Int) -> Unit {
+        val night = isNight(ctx)
+        return { viewId, method, d, n ->
             if (Build.VERSION.SDK_INT >= 34) {
                 rv.setColorInt(viewId, method, d, n)
             } else {
                 rv.setInt(viewId, method, if (night) n else d)
             }
         }
+    }
+
+    /** Tap target for the whole widget plus the always-there settings gear. */
+    private fun applyTapAndGear(ctx: Context, rv: RemoteViews, id: Int, s: ClockSettings) {
+        val color = colorSetter(ctx, rv)
+        TapActions.tapPending(ctx, id, s)?.let {
+            rv.setOnClickPendingIntent(R.id.root, it)
+            rv.setOnClickPendingIntent(R.id.content, it)
+        }
+        rv.setViewVisibility(R.id.gear, if (s.showGear) View.VISIBLE else View.GONE)
+        rv.setOnClickPendingIntent(R.id.gear, TapActions.gearPending(ctx, id))
+        val day = Palette.resolve(ctx, s, false)
+        val nt = Palette.resolve(ctx, s, true)
+        color(R.id.gear, "setColorFilter", day.sub, nt.sub)
+    }
+
+    fun buildStyled(ctx: Context, id: Int, s: ClockSettings, wDp: Float, hDp: Float): RemoteViews {
+        val rv = RemoteViews(ctx.packageName, R.layout.styled_widget)
+        val now = System.currentTimeMillis()
+        val bmp = StyledRenderer.render(ctx, s, wDp, hDp, now, null, (now % 600_000L) / 1000f, isNight(ctx))
+        rv.setImageViewBitmap(R.id.frame, bmp)
+        applyTapAndGear(ctx, rv, id, s)
+        return rv
+    }
+
+    fun build(ctx: Context, id: Int, s: ClockSettings, wDp: Float, hDp: Float): RemoteViews {
+        val layout = when (s.fontKey) {
+            "sys:sans" -> R.layout.clock_widget_sans
+            "sys:condensed" -> R.layout.clock_widget_condensed
+            "sys:serif" -> R.layout.clock_widget_serif
+            "sys:mono" -> R.layout.clock_widget_mono
+            else -> R.layout.clock_widget_light
+        }
+        val rv = RemoteViews(ctx.packageName, layout)
+
+        // ---- colors (day/night pair; API 34+ switches automatically, older APIs at update time)
+        val day = Palette.resolve(ctx, s, false)
+        val nt = Palette.resolve(ctx, s, true)
+        val color = colorSetter(ctx, rv)
         for (v in intArrayOf(R.id.time, R.id.ampm, R.id.date, R.id.zone1_clock, R.id.zone2_clock)) {
             color(v, "setTextColor", day.text, nt.text)
         }
@@ -159,31 +188,11 @@ object WidgetRenderer {
         }
         rv.setInt(R.id.content, "setGravity", Gravity.CENTER_VERTICAL or hGravity)
 
-        // ---- tap targets: time/alarm -> clock app, date -> calendar, anywhere else -> settings
-        fun pending(code: Int, intent: Intent): PendingIntent = PendingIntent.getActivity(
-            ctx, id * 10 + code, intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-        val alarms = pending(1, Intent(AlarmClock.ACTION_SHOW_ALARMS))
-        val calendar = pending(
-            2, Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_CALENDAR),
-        )
-        val settings = pending(
-            3,
-            Intent(ctx, ConfigActivity::class.java)
-                .setAction(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE)
-                .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id),
-        )
-        rv.setOnClickPendingIntent(R.id.bg, settings)
-        rv.setOnClickPendingIntent(R.id.content, settings)
-        rv.setOnClickPendingIntent(R.id.time_row, alarms)
-        rv.setOnClickPendingIntent(R.id.alarm, alarms)
-        rv.setOnClickPendingIntent(R.id.date, calendar)
-
+        applyTapAndGear(ctx, rv, id, s)
         return rv
     }
 
-    private fun nextAlarmText(ctx: Context): String? {
+    fun nextAlarmText(ctx: Context): String? {
         val trigger = ctx.getSystemService(AlarmManager::class.java)?.nextAlarmClock?.triggerTime ?: return null
         val skeleton = if (DateFormat.is24HourFormat(ctx)) "EEEHm" else "EEEjm"
         val pattern = DateFormat.getBestDateTimePattern(Locale.getDefault(), skeleton)

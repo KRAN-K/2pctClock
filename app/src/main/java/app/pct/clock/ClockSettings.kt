@@ -22,15 +22,36 @@ enum class ThemeMode(val label: String) {
     CUSTOM("Custom"),
 }
 
-enum class ClockFont(val label: String) {
-    SANS("Sans"),
-    LIGHT("Light"),
-    CONDENSED("Condensed"),
-    SERIF("Serif"),
-    MONO("Mono"),
+enum class ClockAlign(val label: String) { START("Left"), CENTER("Center"), END("Right") }
+
+enum class DigitAnim(val label: String) {
+    NONE("None"), ROLL("Roll"), FADE("Fade"), POP("Pop"),
+    FLICKER("Flicker"), FIRE("Fire"), BURN("Burn"), WATER("Water"),
 }
 
-enum class ClockAlign(val label: String) { START("Left"), CENTER("Center"), END("Right") }
+enum class AnimUnit(val label: String) { MINUTE("Every minute"), SECOND("Every second") }
+
+enum class BorderStyle(val label: String, val animated: Boolean) {
+    NONE("None", false),
+    SOLID("Solid", false),
+    DOUBLE("Double", false),
+    GLOW("Neon glow", false),
+    RAINBOW("Rainbow", true),
+    PULSE("Pulse", true),
+    FIRE("Fire", true),
+}
+
+enum class BgMode(val label: String) { THEME("Solid"), GRADIENT("Gradient"), IMAGE("Image") }
+
+enum class TapType(val label: String) {
+    ALARMS("Alarms"),
+    TIMERS("Timers"),
+    CALENDAR("Calendar"),
+    APP("An app"),
+    SYSTEM_SETTING("A system setting"),
+    CLOCK_SETTINGS("2%Clock settings"),
+    NONE("Nothing"),
+}
 
 val CORNER_DP = intArrayOf(0, 12, 24, 36, 48)
 val CORNER_NAMES = listOf("Square", "Soft", "Round", "Rounder", "Pill")
@@ -60,19 +81,42 @@ data class ClockSettings(
     val customBgColor: Int = 0xFF1B1B1F.toInt(),
     val bgOpacity: Int = 85,
     val cornerStyle: Int = 2,
-    val font: ClockFont = ClockFont.LIGHT,
+    val fontKey: String = "sys:light",
     val align: ClockAlign = ClockAlign.START,
     val sizeScale: Float = 1f,
     val zones: List<String> = emptyList(),
+    // background
+    val bgMode: BgMode = BgMode.THEME,
+    val gradientKey: String = "sunset",
+    val bgImage: String? = null,
+    val bgDim: Int = 25,
+    // border
+    val border: BorderStyle = BorderStyle.NONE,
+    val borderWidth: Int = 3,
+    val borderColor: Int = 0xFFFF7A00.toInt(),
+    // motion
+    val animation: DigitAnim = DigitAnim.NONE,
+    val animUnit: AnimUnit = AnimUnit.MINUTE,
+    // taps
+    val tapType: TapType = TapType.ALARMS,
+    val tapValue: String = "",
+    val showGear: Boolean = true,
 ) {
+    /** Anything the plain RemoteViews/TextClock widget can't draw needs the bitmap renderer. */
+    fun needsStyled(): Boolean =
+        !fontKey.startsWith("sys:") || bgMode != BgMode.THEME || animation != DigitAnim.NONE ||
+            border != BorderStyle.NONE
+
     fun use24(system24: Boolean): Boolean = when (timeFormat) {
         TimeFormat.SYSTEM -> system24
         TimeFormat.H12 -> false
         TimeFormat.H24 -> true
     }
 
+    private fun secondsOn(): Boolean = showSeconds || (animation != DigitAnim.NONE && animUnit == AnimUnit.SECOND)
+
     fun timePattern(system24: Boolean): String =
-        (if (use24(system24)) "HH:mm" else "h:mm") + (if (showSeconds) ":ss" else "")
+        (if (use24(system24)) "HH:mm" else "h:mm") + (if (secondsOn()) ":ss" else "")
 
     fun zonePattern(system24: Boolean): String = if (use24(system24)) "HH:mm" else "h:mm a"
 
@@ -93,10 +137,22 @@ data class ClockSettings(
         put("customBgColor", customBgColor)
         put("bgOpacity", bgOpacity)
         put("cornerStyle", cornerStyle)
-        put("font", font.name)
+        put("fontKey", fontKey)
         put("align", align.name)
         put("sizeScale", sizeScale.toDouble())
         put("zones", JSONArray(zones))
+        put("bgMode", bgMode.name)
+        put("gradientKey", gradientKey)
+        put("bgImage", bgImage ?: JSONObject.NULL)
+        put("bgDim", bgDim)
+        put("border", border.name)
+        put("borderWidth", borderWidth)
+        put("borderColor", borderColor)
+        put("animation", animation.name)
+        put("animUnit", animUnit.name)
+        put("tapType", tapType.name)
+        put("tapValue", tapValue)
+        put("showGear", showGear)
     }.toString()
 
     companion object {
@@ -109,6 +165,9 @@ data class ClockSettings(
                 val d = ClockSettings()
                 val o = JSONObject(json)
                 val zs = o.optJSONArray("zones")
+                // v0.1 stored an enum under "font"; map it to the new key
+                val fontKey = if (o.has("fontKey")) o.getString("fontKey")
+                else "sys:" + o.optString("font", "LIGHT").lowercase()
                 ClockSettings(
                     timeFormat = o.enumOr("timeFormat", d.timeFormat),
                     showSeconds = o.optBoolean("showSeconds", d.showSeconds),
@@ -122,10 +181,22 @@ data class ClockSettings(
                     customBgColor = o.optInt("customBgColor", d.customBgColor),
                     bgOpacity = o.optInt("bgOpacity", d.bgOpacity).coerceIn(0, 100),
                     cornerStyle = o.optInt("cornerStyle", d.cornerStyle).coerceIn(0, CORNER_DP.size - 1),
-                    font = o.enumOr("font", d.font),
+                    fontKey = fontKey,
                     align = o.enumOr("align", d.align),
                     sizeScale = o.optDouble("sizeScale", d.sizeScale.toDouble()).toFloat().coerceIn(0.5f, 1.5f),
                     zones = if (zs == null) emptyList() else (0 until zs.length()).map { zs.getString(it) }.take(2),
+                    bgMode = o.enumOr("bgMode", d.bgMode),
+                    gradientKey = o.optString("gradientKey", d.gradientKey),
+                    bgImage = if (o.isNull("bgImage")) null else o.optString("bgImage").ifEmpty { null },
+                    bgDim = o.optInt("bgDim", d.bgDim).coerceIn(0, 80),
+                    border = o.enumOr("border", d.border),
+                    borderWidth = o.optInt("borderWidth", d.borderWidth).coerceIn(1, 10),
+                    borderColor = o.optInt("borderColor", d.borderColor),
+                    animation = o.enumOr("animation", d.animation),
+                    animUnit = o.enumOr("animUnit", d.animUnit),
+                    tapType = o.enumOr("tapType", d.tapType),
+                    tapValue = o.optString("tapValue", d.tapValue),
+                    showGear = o.optBoolean("showGear", d.showGear),
                 )
             }.getOrDefault(ClockSettings())
         }
