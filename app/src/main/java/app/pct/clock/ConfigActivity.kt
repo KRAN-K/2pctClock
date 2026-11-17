@@ -411,7 +411,7 @@ private fun LookTab(s: ClockSettings, set: (ClockSettings) -> Unit) {
         Text("Arrangement", style = MaterialTheme.typography.labelLarge)
         ChipRow(LayoutStyle.entries, s.layout, { it.label }) { set(s.copy(layout = it)) }
         Text("Text size ${(s.sizeScale * 100).toInt()}%", style = MaterialTheme.typography.labelLarge)
-        Slider(value = s.sizeScale, onValueChange = { set(s.copy(sizeScale = it)) }, valueRange = 0.5f..1f)
+        Slider(value = s.sizeScale, onValueChange = { set(s.copy(sizeScale = it)) }, valueRange = 0.5f..1.5f)
     }
 }
 

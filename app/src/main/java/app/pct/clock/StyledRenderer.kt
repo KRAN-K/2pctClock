@@ -337,7 +337,7 @@ object StyledRenderer {
             return main + sz * 0.06f + tp.measureText(ampm)
         }
 
-        val scale = min(s.sizeScale, 1f)
+        val scale = s.sizeScale
         val split = s.layout == LayoutStyle.SPLIT && extras.isNotEmpty()
 
         fun extraPaint(text: String, color: Int, size: Float, maxW: Float): Paint {
@@ -385,8 +385,12 @@ object StyledRenderer {
             val tw = timeWidth(timePx)
             if (tw > maxTimeW && tw > 0f) timePx *= maxTimeW / tw
             timePx = timePx.coerceAtLeast(8f * ppd)
+            var digitH = digitHeight(timePx)
+            if (digitH > area.height() * 0.95f) {
+                timePx *= area.height() * 0.95f / digitH
+                digitH = digitHeight(timePx)
+            }
             val timeW = timeWidth(timePx).coerceAtLeast(1f)
-            val digitH = digitHeight(timePx)
 
             var subPx = min(area.height() / (extras.size * 1.25f), timePx * 0.34f).coerceAtLeast(8f * ppd)
             val colAvail = (area.width() - timeW - 2 * gapPx - divW).coerceAtLeast(area.width() * 0.2f)
@@ -422,19 +426,28 @@ object StyledRenderer {
             return
         }
 
-        var timePx = area.height() / (1.15f + extras.size * 0.40f) * scale
+        val baseTimePx = area.height() / (1.15f + extras.size * 0.40f)
+        var timePx = baseTimePx * scale
         val tw = timeWidth(timePx)
         if (tw > area.width() && tw > 0f) timePx *= area.width() / tw
         timePx = timePx.coerceAtLeast(8f * ppd)
-        var subPx = (timePx * 0.30f).coerceIn(11f * ppd, 26f * ppd).coerceAtMost(timePx)
+        // the date and extras keep their normal size when the time is made bigger
+        var subPx = (min(timePx, baseTimePx) * 0.30f).coerceIn(11f * ppd, 26f * ppd).coerceAtMost(timePx)
         var digitH = digitHeight(timePx)
         var gap = if (extras.isEmpty()) 0f else timePx * 0.2f
         var subLine = subPx * 1.25f
         var total = digitH + gap + extras.size * subLine
         // never let the date / extras fall off the bottom: shrink everything to fit the height
         if (total > area.height() && total > 0f) {
-            val k = area.height() / total
-            timePx *= k; subPx *= k; subLine *= k; gap *= k
+            // first give back time size only, so the date stays readable
+            val extrasH = extras.size * subLine
+            if (extrasH > area.height() * 0.6f) {
+                val ke = area.height() * 0.6f / extrasH
+                subPx *= ke; subLine *= ke
+            }
+            val room = (area.height() - extras.size * subLine).coerceAtLeast(area.height() * 0.4f)
+            val k = (room / (digitH + gap)).coerceAtMost(1f)
+            timePx *= k; gap *= k
             digitH = digitHeight(timePx)
             total = digitH + gap + extras.size * subLine
         }

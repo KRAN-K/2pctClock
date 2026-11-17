@@ -195,8 +195,12 @@ object WidgetRenderer {
         val widthFactor = chars * 0.56f + (if (ampmOn) 0.5f else 0f)
         val byHeight = availH / (1.15f + extraRows * 0.40f)
         val byWidth = availW / widthFactor
-        val timeSp = (min(byHeight, byWidth) * min(s.sizeScale, 1f)).coerceIn(14f, 160f)
-        val subSp = (timeSp * 0.30f).coerceIn(11f, 26f)
+        val baseSp = min(byHeight, byWidth)
+        // bigger text grows the time but keeps room for the date and extras
+        val subRef = (baseSp * 0.30f).coerceIn(11f, 26f)
+        val heightCap = ((availH - extraRows * subRef * 1.3f) / 1.15f).coerceAtLeast(14f)
+        val timeSp = min(baseSp * s.sizeScale, min(heightCap, byWidth)).coerceIn(14f, 160f)
+        val subSp = (min(timeSp, baseSp) * 0.30f).coerceIn(11f, 26f)
         rv.setTextViewTextSize(R.id.time, TypedValue.COMPLEX_UNIT_SP, timeSp)
         rv.setTextViewTextSize(R.id.ampm, TypedValue.COMPLEX_UNIT_SP, timeSp * 0.32f)
         rv.setTextViewTextSize(R.id.date, TypedValue.COMPLEX_UNIT_SP, subSp)

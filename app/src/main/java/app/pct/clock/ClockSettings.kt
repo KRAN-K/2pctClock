@@ -212,7 +212,7 @@ data class ClockSettings(
                     fontColor = o.optInt("fontColor", d.fontColor),
                     fontGradientKey = o.optString("fontGradientKey", d.fontGradientKey),
                     align = o.enumOr("align", d.align),
-                    sizeScale = o.optDouble("sizeScale", d.sizeScale.toDouble()).toFloat().coerceIn(0.5f, 1f),
+                    sizeScale = o.optDouble("sizeScale", d.sizeScale.toDouble()).toFloat().coerceIn(0.5f, 1.5f),
                     layout = o.enumOr("layout", d.layout),
                     dateTapType = o.enumOr("dateTapType", d.dateTapType),
                     dateTapValue = o.optString("dateTapValue", d.dateTapValue),
