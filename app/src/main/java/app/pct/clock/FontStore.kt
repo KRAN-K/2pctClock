@@ -29,7 +29,12 @@ object FontStore {
     )
 
     val BUNDLED = listOf(
-        Entry("asset:BleedingCowboys.ttf", "Bleeding Cowboys"),
+        Entry("asset:Rye-Regular.ttf", "Rye (western)"),
+        Entry("asset:Sancreek-Regular.ttf", "Sancreek (western)"),
+        Entry("asset:Butcherman-Regular.ttf", "Butcherman"),
+        Entry("asset:Eater-Regular.ttf", "Eater"),
+        Entry("asset:MetalMania-Regular.ttf", "Metal Mania"),
+        Entry("asset:Monoton-Regular.ttf", "Monoton"),
         Entry("asset:Creepster-Regular.ttf", "Creepster"),
         Entry("asset:Nosifer-Regular.ttf", "Nosifer"),
         Entry("asset:Pacifico-Regular.ttf", "Pacifico"),

@@ -6,7 +6,7 @@ A feature-packed, customizable Android clock widget.
 - Live ticking time, date and world clocks (plain styles use the system `TextClock`, so no wake-ups or services)
 - **Date formats**: M/D/YYYY, MM/DD/YYYY, M/D/YY, D/M/YYYY, YYYY-MM-DD, Mon D, YYYY, Month D, optional weekday
 - 12h / 24h / system time, optional seconds and AM/PM, next alarm, up to two world clocks
-- **Fonts**: system families, 8 bundled fonts (Bleeding Cowboys, Creepster, Nosifer, Pacifico, Orbitron, Black Ops One, Permanent Marker, Special Elite). Bleeding Cowboys is "free for personal use" (Segments Design), the rest are open-license, and **import your own** from a `.ttf`/`.otf`/`.zip` or a dafont.com link (e.g. `dafont.com/carta-bianca.font`)
+- **Fonts**: system families, 13 bundled open-license fonts (Rye, Sancreek, Butcherman, Eater, Metal Mania, Monoton, Creepster, Nosifer, Pacifico, Orbitron, Black Ops One, Permanent Marker, Special Elite), and **import your own** from a `.ttf`/`.otf`/`.zip` or a dafont.com link (e.g. `dafont.com/carta-bianca.font`)
 - **Backgrounds**: solid, 8 gradient presets, or an image (photo picker or URL), with dim and opacity
 - **Borders**: solid, double, neon glow (static); rainbow, pulse, **fire** (animated)
 - **Digit effects** when the minute or second changes: roll, fade, pop, flicker, fire, burn, water
@@ -22,7 +22,7 @@ is drawn to a bitmap by `StyledRenderer`, and `ClockEngineService` pushes frames
 (per-minute, per-second, or ~15 fps during an effect or animated border). It stops itself when the screen turns off or no styled widget remains.
 
 ## Fonts and licensing
-Bundled fonts are SIL OFL. Fonts from dafont.com are often personal-use only, so they are not bundled; the app imports
+Bundled fonts are SIL OFL (Permanent Marker and Special Elite are Apache 2.0). Fonts from dafont.com are often personal-use only, so they are not bundled; the app imports
 them on demand for the user. Check each font's license.
 
 ## Build
