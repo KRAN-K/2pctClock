@@ -6,7 +6,7 @@ A feature-packed, customizable Android clock widget.
 - Live ticking time, date and world clocks (plain styles use the system `TextClock`, so no wake-ups or services)
 - **Date formats**: M/D/YYYY, MM/DD/YYYY, M/D/YY, D/M/YYYY, YYYY-MM-DD, Mon D, YYYY, Month D, optional weekday
 - 12h / 24h / system time, optional seconds and AM/PM, next alarm, up to two world clocks
-- **Fonts**: system families, 8 bundled open-license fonts (Rye, Creepster, Bangers, Bungee Inline, Monoton, Press Start 2P, Pacifico, Great Vibes), and **import your own** from a `.ttf`/`.otf`/`.zip` or a dafont.com link (e.g. `dafont.com/carta-bianca.font`)
+- **Fonts**: system families, 8 bundled fonts (Bleeding Cowboys, Creepster, Nosifer, Pacifico, Orbitron, Black Ops One, Permanent Marker, Special Elite). Bleeding Cowboys is "free for personal use" (Segments Design), the rest are open-license, and **import your own** from a `.ttf`/`.otf`/`.zip` or a dafont.com link (e.g. `dafont.com/carta-bianca.font`)
 - **Backgrounds**: solid, 8 gradient presets, or an image (photo picker or URL), with dim and opacity
 - **Borders**: solid, double, neon glow (static); rainbow, pulse, **fire** (animated)
 - **Digit effects** when the minute or second changes: roll, fade, pop, flicker, fire, burn, water

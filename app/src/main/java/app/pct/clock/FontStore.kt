@@ -29,14 +29,14 @@ object FontStore {
     )
 
     val BUNDLED = listOf(
-        Entry("asset:Rye-Regular.ttf", "Rye (western)"),
+        Entry("asset:BleedingCowboys.ttf", "Bleeding Cowboys"),
         Entry("asset:Creepster-Regular.ttf", "Creepster"),
-        Entry("asset:Bangers-Regular.ttf", "Bangers"),
-        Entry("asset:BungeeInline-Regular.ttf", "Bungee Inline"),
-        Entry("asset:Monoton-Regular.ttf", "Monoton"),
-        Entry("asset:PressStart2P-Regular.ttf", "Press Start 2P"),
+        Entry("asset:Nosifer-Regular.ttf", "Nosifer"),
         Entry("asset:Pacifico-Regular.ttf", "Pacifico"),
-        Entry("asset:GreatVibes-Regular.ttf", "Great Vibes"),
+        Entry("asset:Orbitron.ttf", "Orbitron (digital)"),
+        Entry("asset:BlackOpsOne-Regular.ttf", "Black Ops One"),
+        Entry("asset:PermanentMarker-Regular.ttf", "Permanent Marker"),
+        Entry("asset:SpecialElite-Regular.ttf", "Special Elite (typewriter)"),
     )
 
     private val cache = ConcurrentHashMap<String, Typeface>()

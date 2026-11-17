@@ -245,10 +245,13 @@ fun ConfigScreen(
 @Composable
 private fun LivePreview(s: ClockSettings) {
     val ctx = LocalContext.current
-    val dark = isSystemInDarkTheme()
-    BoxWithConstraints(Modifier.fillMaxWidth().height(150.dp)) {
+    val sysDark = isSystemInDarkTheme()
+    var mode by remember { mutableIntStateOf(0) } // 0 auto, 1 light, 2 dark
+    val dark = mode == 2 || (mode == 0 && sysDark)
+    Column {
+    BoxWithConstraints(Modifier.fillMaxWidth().height(150.dp).background(androidx.compose.ui.graphics.Color(0xFF8C8C8C))) {
         val wDp = maxWidth.value
-        val frame by produceState<ImageBitmap?>(null, s, wDp) {
+        val frame by produceState<ImageBitmap?>(null, s, wDp, dark) {
             // Preview clock jumps forward one unit every 3 seconds so the effects are visible.
             val start = System.currentTimeMillis()
             val unitMs = if (s.animUnit == AnimUnit.SECOND) 1_000L else 60_000L
@@ -282,6 +285,8 @@ private fun LivePreview(s: ClockSettings) {
         frame?.let {
             Image(it, contentDescription = "Preview", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.FillBounds)
         }
+    }
+    ChipRow(listOf(0, 1, 2), mode, { listOf("Preview: auto", "Light", "Dark")[it] }) { mode = it }
     }
 }
 
