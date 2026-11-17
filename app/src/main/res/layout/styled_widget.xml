@@ -24,8 +24,8 @@
         android:layout_height="match_parent"
         android:orientation="vertical"
         android:visibility="gone">
-        <View android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="62" />
-        <View
+        <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="62" />
+        <FrameLayout
             android:id="@+id/date_hit_v_view"
             android:layout_width="match_parent"
             android:layout_height="0dp"
@@ -39,8 +39,8 @@
         android:layout_height="match_parent"
         android:orientation="horizontal"
         android:visibility="gone">
-        <View android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="58" />
-        <View
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="58" />
+        <FrameLayout
             android:id="@+id/date_hit_h_view"
             android:layout_width="0dp"
             android:layout_height="match_parent"
