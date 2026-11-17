@@ -65,6 +65,13 @@ object WidgetRenderer {
         TapActions.tapPending(ctx, id, s)?.let {
             rv.setOnClickPendingIntent(R.id.root, it)
             rv.setOnClickPendingIntent(R.id.content, it)
+            // the date tap zones overlay the whole widget, so give their empty parts the normal tap too
+            if (s.needsStyled()) {
+                rv.setOnClickPendingIntent(R.id.date_hit_v, it)
+                rv.setOnClickPendingIntent(R.id.date_hit_h, it)
+                rv.setOnClickPendingIntent(R.id.date_hit_v_spacer, it)
+                rv.setOnClickPendingIntent(R.id.date_hit_h_spacer, it)
+            }
         }
         val dateTap = if (s.showDate) TapActions.datePending(ctx, id, s) else null
         if (dateTap != null) {
