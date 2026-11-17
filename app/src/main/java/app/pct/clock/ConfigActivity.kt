@@ -408,10 +408,11 @@ private fun LookTab(s: ClockSettings, set: (ClockSettings) -> Unit) {
     Section("Layout") {
         Text("Alignment", style = MaterialTheme.typography.labelLarge)
         ChipRow(ClockAlign.entries, s.align, { it.label }) { set(s.copy(align = it)) }
+        SwitchRow("Show settings gear icon", s.showGear) { set(s.copy(showGear = it)) }
         Text("Arrangement", style = MaterialTheme.typography.labelLarge)
         ChipRow(LayoutStyle.entries, s.layout, { it.label }) { set(s.copy(layout = it)) }
         Text("Text size ${(s.sizeScale * 100).toInt()}%", style = MaterialTheme.typography.labelLarge)
-        Slider(value = s.sizeScale, onValueChange = { set(s.copy(sizeScale = it)) }, valueRange = 0.5f..1.5f)
+        Slider(value = s.sizeScale, onValueChange = { set(s.copy(sizeScale = it)) }, valueRange = 0.5f..2f)
     }
 }
 

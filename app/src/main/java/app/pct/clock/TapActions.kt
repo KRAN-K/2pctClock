@@ -50,6 +50,15 @@ object TapActions {
     private fun clockAppIntent(ctx: Context, widgetId: Int): Intent {
         val pm = ctx.packageManager
         for (pkg in CLOCK_PACKAGES) pm.getLaunchIntentForPackage(pkg)?.let { return it }
+        // unknown phone brand: look for a launcher app that is called "Clock" or has "clock" in its package
+        val q = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        pm.queryIntentActivities(q, 0)
+            .firstOrNull {
+                val pkg = it.activityInfo.packageName
+                pkg != ctx.packageName && (pkg.contains("clock", true) ||
+                    it.loadLabel(pm).toString().equals("Clock", true))
+            }
+            ?.let { pm.getLaunchIntentForPackage(it.activityInfo.packageName)?.let { i -> return i } }
         return clockIntent(ctx, widgetId, AlarmClock.ACTION_SHOW_ALARMS)
     }
 

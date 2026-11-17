@@ -380,7 +380,12 @@ object StyledRenderer {
         if (split) {
             val gapPx = 10f * ppd
             val divW = max(1f, 1.5f * ppd)
-            var timePx = area.height() / 1.15f * scale
+            var timePx = area.height() / 1.15f * scale * run {
+                tp.textSize = 100f
+                val rr = Rect()
+                tp.getTextBounds("0123456789", 0, 10, rr)
+                if (rr.height() > 0) (72f / rr.height()).coerceIn(0.6f, 2.5f) else 1f
+            }
             val maxTimeW = area.width() * 0.58f
             val tw = timeWidth(timePx)
             if (tw > maxTimeW && tw > 0f) timePx *= maxTimeW / tw
@@ -426,15 +431,22 @@ object StyledRenderer {
             return
         }
 
-        val baseTimePx = area.height() / (1.15f + extras.size * 0.40f)
+        // fonts differ a lot in digit size; normalise so every font's digits come out the same visual size
+        val norm = run {
+            tp.textSize = 100f
+            val rr = Rect()
+            tp.getTextBounds("0123456789", 0, 10, rr)
+            if (rr.height() > 0) (72f / rr.height()).coerceIn(0.6f, 2.5f) else 1f
+        }
+        val baseTimePx = area.height() / (1.15f + extras.size * 0.40f) * norm
         var timePx = baseTimePx * scale
         val tw = timeWidth(timePx)
         if (tw > area.width() && tw > 0f) timePx *= area.width() / tw
         timePx = timePx.coerceAtLeast(8f * ppd)
         // the date and extras keep their normal size when the time is made bigger
-        var subPx = (min(timePx, baseTimePx) * 0.30f).coerceIn(11f * ppd, 26f * ppd).coerceAtMost(timePx)
+        var subPx = (min(timePx, baseTimePx) / norm * 0.30f).coerceIn(11f * ppd, 26f * ppd).coerceAtMost(timePx)
         var digitH = digitHeight(timePx)
-        var gap = if (extras.isEmpty()) 0f else timePx * 0.2f
+        var gap = if (extras.isEmpty()) 0f else timePx / norm * 0.2f
         var subLine = subPx * 1.25f
         var total = digitH + gap + extras.size * subLine
         // never let the date / extras fall off the bottom: shrink everything to fit the height

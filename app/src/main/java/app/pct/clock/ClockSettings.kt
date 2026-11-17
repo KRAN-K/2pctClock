@@ -147,6 +147,7 @@ data class ClockSettings(
     fun toJson(): String = JSONObject().apply {
         put("timeFormat", timeFormat.name)
         put("showSeconds", showSeconds)
+        put("ver", 2)
         put("showAmPm", showAmPm)
         put("showDate", showDate)
         put("dateStyle", dateStyle.name)
@@ -212,7 +213,7 @@ data class ClockSettings(
                     fontColor = o.optInt("fontColor", d.fontColor),
                     fontGradientKey = o.optString("fontGradientKey", d.fontGradientKey),
                     align = o.enumOr("align", d.align),
-                    sizeScale = o.optDouble("sizeScale", d.sizeScale.toDouble()).toFloat().coerceIn(0.5f, 1.5f),
+                    sizeScale = o.optDouble("sizeScale", d.sizeScale.toDouble()).toFloat().coerceIn(0.5f, 2f),
                     layout = o.enumOr("layout", d.layout),
                     dateTapType = o.enumOr("dateTapType", d.dateTapType),
                     dateTapValue = o.optString("dateTapValue", d.dateTapValue),
@@ -226,7 +227,7 @@ data class ClockSettings(
                     borderColor = o.optInt("borderColor", d.borderColor),
                     animation = o.enumOr("animation", d.animation),
                     animUnit = o.enumOr("animUnit", d.animUnit),
-                    tapType = o.enumOr("tapType", d.tapType),
+                    tapType = o.enumOr("tapType", d.tapType).let { if (o.optInt("ver", 1) < 2 && it == TapType.ALARMS) TapType.CLOCK else it },
                     tapValue = o.optString("tapValue", d.tapValue),
                     showGear = o.optBoolean("showGear", d.showGear),
                 )
