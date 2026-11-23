@@ -89,6 +89,19 @@ import kotlinx.coroutines.withContext
 class ConfigActivity : ComponentActivity() {
     private var widgetId = AppWidgetManager.INVALID_APPWIDGET_ID
     private var pending: ClockSettings? = null
+    private var refreshedOnResume = false
+
+    override fun onResume() {
+        super.onResume()
+        // Opening 2%Clock from the launcher is also a convenient recovery action for
+        // launchers that have stopped refreshing hosted RemoteViews. Do this once per
+        // activity instance, without changing any saved widget settings.
+        if (widgetId == AppWidgetManager.INVALID_APPWIDGET_ID && !refreshedOnResume) {
+            refreshedOnResume = true
+            WidgetRenderer.updateAll(this)
+            ClockEngineService.sync(this, refresh = true)
+        }
+    }
 
     private val notifPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) {
