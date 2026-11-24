@@ -59,6 +59,7 @@ class ClockEngineService : Service() {
     override fun onCreate() {
         super.onCreate()
         screenOn = getSystemService(PowerManager::class.java)?.isInteractive ?: true
+        running = true
         startAsForeground()
         val f = IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_OFF)
@@ -78,6 +79,7 @@ class ClockEngineService : Service() {
     }
 
     override fun onDestroy() {
+        running = false
         handler.removeCallbacks(tick)
         runCatching { unregisterReceiver(receiver) }
         super.onDestroy()
@@ -93,7 +95,9 @@ class ClockEngineService : Service() {
     private fun startAsForeground() {
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL, "Clock effects", NotificationManager.IMPORTANCE_MIN),
+            NotificationChannel(CHANNEL, "Clock effects", NotificationManager.IMPORTANCE_MIN).apply {
+                setSound(null, null); enableVibration(false); enableLights(false); setShowBadge(false)
+            },
         )
         val open = PendingIntent.getActivity(
             this, 0, Intent(this, ConfigActivity::class.java),
@@ -105,6 +109,9 @@ class ClockEngineService : Service() {
             .setContentText("Animates your clock while the screen is on")
             .setContentIntent(open)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setShowWhen(false)
+            .setCategory(Notification.CATEGORY_SERVICE)
             .build()
         if (Build.VERSION.SDK_INT >= 34) {
             startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
@@ -198,6 +205,7 @@ class ClockEngineService : Service() {
         const val ACTION_REFRESH = "app.pct.clock.REFRESH"
         const val ACTION_WATCHDOG = "app.pct.clock.WATCHDOG"
         @Volatile var lastFrameAt = 0L
+        @Volatile var running = false
 
         /**
          * Safety net: a quiet (non-waking) alarm about once a minute. If the engine has died or stalled while
@@ -221,6 +229,7 @@ class ClockEngineService : Service() {
             val needed = ids.any { SettingsStore.load(ctx, it).needsStyled() }
             val i = Intent(ctx, ClockEngineService::class.java)
             if (refresh) i.action = ACTION_REFRESH
+            if (needed && refresh.not() && running) return // already up: don't re-post the notification
             if (needed) {
                 runCatching { ContextCompat.startForegroundService(ctx, i) }
             } else {
