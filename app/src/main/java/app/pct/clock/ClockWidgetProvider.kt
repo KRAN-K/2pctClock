@@ -35,6 +35,15 @@ class ClockWidgetProvider : AppWidgetProvider() {
         super.onReceive(context, intent)
         when (intent.action) {
             AppWidgetManager.ACTION_APPWIDGET_UPDATE -> Unit // handled by onUpdate
+            ClockEngineService.ACTION_WATCHDOG -> {
+                val interactive = context.getSystemService(android.os.PowerManager::class.java)?.isInteractive ?: false
+                val stale = System.currentTimeMillis() - ClockEngineService.lastFrameAt > 5_000L
+                if (interactive && stale) {
+                    WidgetRenderer.updateAll(context)
+                    ClockEngineService.sync(context)
+                }
+                ClockEngineService.scheduleWatchdog(context)
+            }
             else -> {
                 WidgetRenderer.updateAll(context)
                 ClockEngineService.sync(context)

@@ -1,5 +1,7 @@
 package app.pct.clock
 
+import android.app.AlarmManager
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -44,7 +46,7 @@ class ClockEngineService : Service() {
                 }
                 Intent.ACTION_SCREEN_ON, Intent.ACTION_USER_PRESENT -> {
                     screenOn = true
-                    kick()
+                    kick() // draws one fresh frame; keeps ticking only if the phone is unlocked
                 }
                 else -> { // config / time / timezone changed: redraw everything
                     states.clear()
@@ -113,7 +115,28 @@ class ClockEngineService : Service() {
 
     private fun msToNext(period: Long, now: Long) = period - (now % period) + 20L
 
+    /** One failed frame (e.g. the launcher refusing a bitmap) must never stop the clock from ticking. */
     private fun frame() {
+        var next = 5_000L
+        try {
+            next = drawFrame()
+            lastFrameAt = System.currentTimeMillis()
+        } catch (t: Throwable) {
+            next = 3_000L
+        }
+        if (next > 0 && canTick()) handler.postDelayed(tick, next.coerceAtLeast(30L))
+        scheduleWatchdog(this)
+    }
+
+    /** No point drawing while the screen is off or the lock screen is up (widgets aren't visible there). */
+    private fun canTick(): Boolean {
+        if (!screenOn) return false
+        val km = getSystemService(KeyguardManager::class.java)
+        return km == null || !km.isKeyguardLocked
+    }
+
+    /** Draws all styled widgets once; returns ms until the next frame, or 0 to stop. */
+    private fun drawFrame(): Long {
         val mgr = AppWidgetManager.getInstance(this)
         val ids = mgr.getAppWidgetIds(ComponentName(this, ClockWidgetProvider::class.java))
         val now = System.currentTimeMillis()
@@ -150,14 +173,14 @@ class ClockEngineService : Service() {
             val opts = mgr.getAppWidgetOptions(id)
             val wDp = opts.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 250).toFloat()
             val hDp = opts.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 110).toFloat()
-            val bmp = StyledRenderer.render(this, s, wDp, hDp, now, anim, (now % 600_000L) / 1000f, night)
+            val bmp = StyledRenderer.render(this, s, wDp, hDp, now, anim, (now % 600_000L) / 1000f, night, maxPixels = 400_000)
             val rv = RemoteViews(packageName, R.layout.styled_widget)
             rv.setImageViewBitmap(R.id.frame, bmp)
             mgr.partiallyUpdateAppWidget(id, rv)
 
             val d = when {
                 animating -> 60L
-                s.animatedStyle() -> 90L
+                s.animatedStyle() -> 130L
                 secondsShown -> msToNext(1000L, now)
                 else -> msToNext(60_000L, now)
             }
@@ -166,13 +189,28 @@ class ClockEngineService : Service() {
         states.keys.retainAll(ids.toSet())
         if (!any) {
             stopSelf()
-            return
+            return 0L
         }
-        if (screenOn) handler.postDelayed(tick, delay.coerceAtLeast(30L))
+        return delay
     }
 
     companion object {
         const val ACTION_REFRESH = "app.pct.clock.REFRESH"
+        const val ACTION_WATCHDOG = "app.pct.clock.WATCHDOG"
+        @Volatile var lastFrameAt = 0L
+
+        /**
+         * Safety net: a quiet (non-waking) alarm about once a minute. If the engine has died or stalled while
+         * the screen is on, the provider redraws the clock so the time can't stay frozen.
+         */
+        fun scheduleWatchdog(ctx: Context) {
+            val am = ctx.getSystemService(AlarmManager::class.java) ?: return
+            val pi = PendingIntent.getBroadcast(
+                ctx, 77, Intent(ctx, ClockWidgetProvider::class.java).setAction(ACTION_WATCHDOG),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            runCatching { am.set(AlarmManager.RTC, System.currentTimeMillis() + 60_000L, pi) }
+        }
         private const val CHANNEL = "engine"
         private const val NOTIF_ID = 1
 
