@@ -48,6 +48,7 @@ class ClockEngineService : Service() {
                     screenOn = true
                     kick() // draws one fresh frame; keeps ticking only if the phone is unlocked
                 }
+                Intent.ACTION_TIME_TICK -> if (screenOn) kick()
                 else -> { // config / time / timezone changed: redraw everything
                     states.clear()
                     kick()
@@ -68,6 +69,7 @@ class ClockEngineService : Service() {
             addAction(Intent.ACTION_CONFIGURATION_CHANGED)
             addAction(Intent.ACTION_TIME_CHANGED)
             addAction(Intent.ACTION_TIMEZONE_CHANGED)
+            addAction(Intent.ACTION_TIME_TICK) // once a minute on the wall clock; no timer needed
         }
         ContextCompat.registerReceiver(this, receiver, f, ContextCompat.RECEIVER_NOT_EXPORTED)
     }
@@ -170,17 +172,23 @@ class ClockEngineService : Service() {
                 st.prev = st.text
                 st.animStart = now
             }
+            val same = st.text == text
             st.text = text
 
             val dur = s.animation.durationMs
             val since = now - st.animStart
             val animating = st.animStart > 0 && since < dur
+            if (same && !animating && !s.animatedStyle() && st.full) {
+                // nothing changed on screen since the last frame: skip the expensive redraw
+                delay = min(delay, if (secondsShown) msToNext(1000L, now) else msToNext(60_000L, now))
+                continue
+            }
             val anim = if (animating) AnimFrame(st.prev, since / dur.toFloat()) else null
 
             val opts = mgr.getAppWidgetOptions(id)
             val wDp = opts.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 250).toFloat()
             val hDp = opts.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 110).toFloat()
-            val bmp = StyledRenderer.render(this, s, wDp, hDp, now, anim, (now % 600_000L) / 1000f, night, maxPixels = 400_000)
+            val bmp = StyledRenderer.render(this, s, wDp, hDp, now, anim, (now % 600_000L) / 1000f, night, maxPixels = 300_000)
             val rv = RemoteViews(packageName, R.layout.styled_widget)
             rv.setImageViewBitmap(R.id.frame, bmp)
             mgr.partiallyUpdateAppWidget(id, rv)
